@@ -1,7 +1,5 @@
-{
-  "functions": {
-    "api/notion.js": {
-      "runtime": "nodejs18.x"
+  {
+    "functions": {
+      "api/notion.js": {}
     }
   }
-}
