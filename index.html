@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>待辦清單</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', '微軟正黑體', sans-serif;
+      background: #f0f0f0;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 48px 16px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 580px;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      color: #111;
+      margin-bottom: 24px;
+      font-weight: 700;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .input-row input {
+      flex: 1;
+      padding: 12px 16px;
+      border: 1.5px solid #ddd;
+      border-radius: 10px;
+      font-size: 1rem;
+      outline: none;
+      background: white;
+      transition: border-color 0.15s;
+    }
+
+    .input-row input:focus { border-color: #555; }
+
+    .input-row button {
+      padding: 12px 22px;
+      background: #111;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 1rem;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.15s;
+    }
+
+    .input-row button:hover { background: #333; }
+    .input-row button:disabled { background: #999; cursor: not-allowed; }
+
+    .todo-list { list-style: none; }
+
+    .todo-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: white;
+      padding: 14px 16px;
+      border-radius: 10px;
+      margin-bottom: 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+      transition: opacity 0.2s;
+    }
+
+    .todo-item input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+      accent-color: #111;
+      flex-shrink: 0;
+    }
+
+    .todo-text {
+      flex: 1;
+      font-size: 1rem;
+      color: #222;
+      word-break: break-word;
+    }
+
+    .todo-text.done {
+      text-decoration: line-through;
+      color: #aaa;
+    }
+
+    .delete-btn {
+      background: none;
+      border: none;
+      color: #ccc;
+      cursor: pointer;
+      font-size: 1.1rem;
+      padding: 4px 6px;
+      border-radius: 6px;
+      line-height: 1;
+      flex-shrink: 0;
+      transition: color 0.15s;
+    }
+
+    .delete-btn:hover { color: #e53e3e; }
+
+    .status {
+      text-align: center;
+      color: #aaa;
+      padding: 32px 0;
+      font-size: 0.95rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>待辦清單</h1>
+    <div class="input-row">
+      <input type="text" id="todo-input" placeholder="新增待辦事項..." autocomplete="off" />
+      <button id="add-btn" onclick="addTodo()">新增</button>
+    </div>
+    <ul class="todo-list" id="todo-list"></ul>
+    <p class="status" id="status">載入中...</p>
+  </div>
+
+  <script>
+    const API = '/api/notion';
+
+    async function loadTodos() {
+      setStatus('載入中...');
+      try {
+        const res = await fetch(API);
+        if (!res.ok) throw new Error(await res.text());
+        const todos = await res.json();
+        renderList(todos);
+        setStatus(todos.length === 0 ? '沒有待辦事項' : '');
+      } catch (e) {
+        setStatus('載入失敗：' + e.message);
+      }
+    }
+
+    function renderList(todos) {
+      const list = document.getElementById('todo-list');
+      if (!todos.length) { list.innerHTML = ''; return; }
+      list.innerHTML = todos.map(todo => `
+        <li class="todo-item">
+          <input type="checkbox" ${todo.done ? 'checked' : ''}
+            onchange="toggleTodo('${todo.id}', this.checked)" />
+          <span class="todo-text ${todo.done ? 'done' : ''}">${escapeHtml(todo.text)}</span>
+          <button class="delete-btn" onclick="deleteTodo('${todo.id}')" title="刪除">✕</button>
+        </li>
+      `).join('');
+    }
+
+    async function addTodo() {
+      const input = document.getElementById('todo-input');
+      const btn = document.getElementById('add-btn');
+      const text = input.value.trim();
+      if (!text) return;
+
+      btn.disabled = true;
+      input.value = '';
+      try {
+        await fetch(API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        });
+        await loadTodos();
+      } finally {
+        btn.disabled = false;
+        input.focus();
+      }
+    }
+
+    async function toggleTodo(id, done) {
+      await fetch(API, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, done }),
+      });
+      await loadTodos();
+    }
+
+    async function deleteTodo(id) {
+      await fetch(`${API}?id=${id}`, { method: 'DELETE' });
+      await loadTodos();
+    }
+
+    function setStatus(msg) {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.style.display = msg ? 'block' : 'none';
+    }
+
+    function escapeHtml(str) {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    document.getElementById('todo-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') addTodo();
+    });
+
+    loadTodos();
+  </script>
+</body>
+</html>
